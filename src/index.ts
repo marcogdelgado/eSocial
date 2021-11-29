@@ -89,11 +89,7 @@ async function main () {
           await page.click(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses > div:nth-child(${f})`)
           await page.waitForTimeout(1000)
           const fechado = await page.$eval('#painel-identificacao-evento > span:nth-child(1) > span.valor > span', element => element.textContent)
-          if (fechado === 'Fechada') {
-            appendFileSync('./src/saida/saida.csv', CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + auxMes + ';' + fechado + '\n')
-          } else {
-            appendFileSync('./src/saida/saida.csv', CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + auxMes + ';' + fechado + '\n')
-          }
+          appendFileSync('./src/saida/saida.csv', CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + auxMes + ';' + fechado + '\n')
           auxMes2 = auxMes2.replace(auxMes2.substr(0, 3), '')
           if (auxMes2 === '') {
             break
