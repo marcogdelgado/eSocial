@@ -5,6 +5,7 @@ import { workerData } from 'worker_threads'
 import { readCsv } from './components/helprs/fileSystem'
 import { Log } from './components/helprs/log'
 import { v4 as uuid } from 'uuid'
+import clearPath from './components/clearPath'
 
 const InputPath = join(__dirname, 'entrada')
 const processingPath = join(__dirname, 'processando')
@@ -21,6 +22,7 @@ async function main () {
   const newBrowser = new CreateBrowser()
   let wereNotProcessed: any
   let fileCurrent: string
+  clearPath(processingPath, OutputPath)
   try {
     const filesInput = readdirSync(InputPath)
     for (let i = 0; i < filesInput.length; i++) {
@@ -86,6 +88,7 @@ async function main () {
         let auxMes2 = auxMes
         for (let f = 1; f <= diMes; f++) {
           auxMes = auxMes2.substr(0, 3)
+          await page.waitForTimeout(1000)
           await page.click(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses > div:nth-child(${f})`)
           await page.waitForTimeout(1000)
           const fechado = await page.$eval('#painel-identificacao-evento > span:nth-child(1) > span.valor > span', element => element.textContent)
