@@ -1,11 +1,12 @@
 import CreateBrowser from './CreateBrowser/CreateBrowser'
-import { appendFileSync, readdirSync, unlinkSync, copyFileSync, writeFileSync } from 'fs'
+import { appendFileSync, readdirSync, writeFileSync } from 'fs'
 import { join, extname } from 'path'
 import { workerData } from 'worker_threads'
 import { readCsv } from './components/helprs/fileSystem'
 import { Log } from './components/helprs/log'
 import { v4 as uuid } from 'uuid'
 import clearPath from './components/clearPath'
+import { notIncludesItemArray } from './components/helprs/array'
 
 const InputPath = join(__dirname, 'entrada')
 const processingPath = join(__dirname, 'processando')
@@ -15,14 +16,14 @@ const log = new Log(pathStatus)
 let clienteAtual: string
 let tentativas: number = 5
 
-appendFileSync('./src/saida/error.csv', 'RAZÃO SOCIAL' + ';' + 'CNPJ' + ';' + 'ERRO' + '\n')
-appendFileSync('./src/saida/saida.csv', 'RAZÃO SOCIAL' + ';' + 'CNPJ' + ';' + 'MÊS' + ';' + 'SITUAÇÃO DA FOLHA' + '\n')
+appendFileSync(join(OutputPath, 'error.csv'), 'RAZÃO SOCIAL' + ';' + 'CNPJ' + ';' + 'ERRO' + '\n')
+appendFileSync(join(OutputPath, 'saida.csv'), 'RAZÃO SOCIAL' + ';' + 'CNPJ' + ';' + 'MÊS' + ';' + 'SITUAÇÃO DA FOLHA' + '\n')
 
 async function main () {
   const newBrowser = new CreateBrowser()
   let wereNotProcessed: any
   let fileCurrent: string
-  clearPath(processingPath, OutputPath)
+
   try {
     const filesInput = readdirSync(InputPath)
     for (let i = 0; i < filesInput.length; i++) {
@@ -55,12 +56,19 @@ async function main () {
         await page.waitForTimeout(2000)
         await page.click('#btn-verificar-procuracao-cnpj')
         await page.waitForTimeout(2000)
-        const valida = await page.$eval('#procuradorCnpj-error', element => element.textContent).catch(e => 'sem errro')
-        if (valida === 'CNPJ inválido.') {
-          appendFileSync('./src/saida/error.csv', CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + 'cnpj invalido' + '\n')
+        const procurador = await page.$eval('#mensagemGeral > div > span', element => element.textContent).catch(e => '')
+        // O procurador não possui perfil com autorização de acesso à Web
+        if (procurador !== '') {
+          appendFileSync(join(OutputPath, 'error.csv'), CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + procurador.trim() + '\n')
           CLIENTES.shift()
-          // await browser.close()
-          writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
+          // writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
+          throw new Error('CNPJ impossibilitado de prosseguir')
+        }
+        const valida = await page.$eval('#procuradorCnpj-error', element => element.textContent).catch(e => '')
+        if (valida === 'CNPJ inválido.') {
+          appendFileSync(join(OutputPath, 'error.csv'), CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + 'cnpj invalido' + '\n')
+          CLIENTES.shift()
+          // writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
           throw new Error('CNPJ inválido.')
         }
 
@@ -70,10 +78,9 @@ async function main () {
 
         const faltaDados = await page.$eval('#InicioAdesao > h2', element => element.textContent).catch(e => '')
         if (faltaDados === 'Dados do Empregador') {
-          appendFileSync('./src/saida/error.csv', CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + faltaDados + '\n')
+          appendFileSync(join(OutputPath, 'error.csv'), CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + 'Faltam Dados do Empregador' + '\n')
           CLIENTES.shift()
-          // await browser.close()
-          writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
+          // writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
           throw new Error('Dados do Empregador')
         }
 
@@ -82,42 +89,63 @@ async function main () {
         await page.waitForSelector('#menuGestaoFolha')
         await page.click('#menuGestaoFolha')
         await page.waitForTimeout(2000)
-        const verificaMes = await page.$eval('#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses', element => element.textContent)
-        const diMes = verificaMes.length / 3
-        let auxMes = verificaMes
-        let auxMes2 = auxMes
-        for (let f = 1; f <= diMes; f++) {
-          auxMes = auxMes2.substr(0, 3)
+        // const verificaAno = await page.$$eval('#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-anos div.ano, #conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-anos div.ano', element => element.length)
+        // const verificaMes = await page.$$eval('#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses div.mes, #conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses div.mes', element => element.length)
+        const anoSelecionado = workerData ? workerData.anos : ['2021']
+        const mesesSelecionado = workerData ? workerData.meses : ['mai', 'jun', 'jul', 'dez']
+        const ano = await page.$$eval('#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-anos div.ano, #conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-anos div.ano', element => element.map(item => item.textContent.trim()))
+        notIncludesItemArray(anoSelecionado, ano).forEach(item => {
+          appendFileSync(join(OutputPath, 'saida.csv'), CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + item + 'indisponivel' + '\n')
+        })
+
+        for (let a = 1; a <= ano.length; a++) {
           await page.waitForTimeout(1000)
-          await page.click(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses > div:nth-child(${f})`)
-          await page.waitForTimeout(1000)
-          const fechado = await page.$eval('#painel-identificacao-evento > span:nth-child(1) > span.valor > span', element => element.textContent)
-          appendFileSync('./src/saida/saida.csv', CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + auxMes + ';' + fechado + '\n')
-          auxMes2 = auxMes2.replace(auxMes2.substr(0, 3), '')
-          if (auxMes2 === '') {
-            break
+          await page.waitForSelector(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-anos > div:nth-child(${a}) > a`)
+
+          if (anoSelecionado.includes(ano[a - 1])) {
+            await page.click(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-anos > div:nth-child(${a}) > a`)
+            console.log(ano[a - 1])
+          } else {
+            continue
           }
+          await page.waitForSelector('#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses div.mes, #conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses div.mes')
+          const mes = await page.$$eval('#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses div.mes, #conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses div.mes', element => element.map(item => item.textContent.trim().toLowerCase()))
+
+          for (let m = 1; m <= mes.length; m++) {
+            await page.waitForTimeout(1000)
+            await page.waitForSelector(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses > div:nth-child(${m})`)
+
+            if (mesesSelecionado.includes(mes[m - 1])) {
+              console.log(mes[m - 1])
+              await page.click(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses > div:nth-child(${m})`)
+            } else {
+              continue
+            }
+            // await page.click(`#conteudo-pagina > div.remuneracoes-trabalhadores > div.marcadores-meses.containerMeses > div:nth-child(${m})`)
+            const situacao = await newBrowser.waitForSituacao()
+            appendFileSync(join(OutputPath, 'saida.csv'), CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + mes[m - 1] + '/' + ano[a - 1] + ';' + situacao + '\n')
+          }
+          notIncludesItemArray(mesesSelecionado, mes).forEach(item => {
+            appendFileSync(join(OutputPath, 'saida.csv'), CLIENTES[index].Nome + ';' + CLIENTES[index].CNPJ.padStart(14, '0') + ';' + item + '/' + ano[a - 1] + ';' + 'indisponivel' + '\n')
+          })
         }
         CLIENTES.shift()
-        writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
+        // writeFileSync('./src/processando/cliente.json', JSON.stringify(CLIENTES))
         wereNotProcessed = CLIENTES
         tentativas = 5
         index--
       }
-
-      copyFileSync(join(InputPath, filesInput[i]), join(OutputPath, filesInput[i]))
-      unlinkSync(join(InputPath, filesInput[i]))
-      unlinkSync(join(processingPath, fileCurrent.replace(extname(fileCurrent), '.json')))
     }
     return { status: true }
   } catch (error) {
-    console.log(error)
+    console.log(error.message)
     await newBrowser.closeAll()
     return { status: false, remainingClients: wereNotProcessed, file: fileCurrent.replace(extname(fileCurrent), '.json') }
   }
 }
 
 (async () => {
+  clearPath(processingPath, OutputPath)
   let canFinish : any
   do {
     canFinish = await main()

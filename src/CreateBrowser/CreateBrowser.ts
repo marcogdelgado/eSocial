@@ -79,12 +79,13 @@ export default class CreateBrowser {
     return str === 'true'
   }
 
-  public async waitForLoaderHidden () {
+  public async waitForSituacao () {
+    await this.page.waitForTimeout(1000)
     // @ts-ignore
-    const aguarda = await this.page.$eval('#imgAguardeExtrato', element => element.style.display)
-    if (aguarda === 'none') {
-      return await this.page.waitForTimeout(15000)
+    const situacao = await this.page.$eval('#painel-identificacao-evento > span:nth-child(1) > span.valor > span', element => element.textContent.trim())
+    if (!situacao) {
+      return await this.waitForSituacao()
     }
-    return this.waitForLoaderHidden()
+    return situacao
   }
 }

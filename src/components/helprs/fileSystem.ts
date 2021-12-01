@@ -7,10 +7,10 @@ export function readCsv (inputPath : string, processingFile: string, isHeader = 
   }
 
   if (existsSync(processingFile)) {
-    return JSON.parse(readFileSync(processingFile, { encoding: 'latin1' }))
+    return JSON.parse(readFileSync(processingFile, { encoding: 'utf-8' }))
   }
   const arrayCsv = []
-  const conteudo = readFileSync(inputPath, { encoding: 'latin1' })
+  const conteudo = readFileSync(inputPath, { encoding: 'utf-8' })
   let header : Array<string>
   if (isHeader) {
     header = conteudo.split('\n')[0].split(';')
@@ -22,6 +22,6 @@ export function readCsv (inputPath : string, processingFile: string, isHeader = 
     })
     arrayCsv.push(obj)
   })
-  writeFileSync(processingFile.replace(extname(processingFile), '.json'), JSON.stringify(arrayCsv), { encoding: 'latin1' })
+  writeFileSync(processingFile.replace(extname(processingFile), '.json'), JSON.stringify(arrayCsv), { encoding: 'utf-8' })
   return arrayCsv
 };
